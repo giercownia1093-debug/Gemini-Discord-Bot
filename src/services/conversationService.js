@@ -19,7 +19,6 @@ import {
   MESSAGE_TYPING_TIMEOUT_MS,
   MODEL,
   SAFETY_SETTINGS,
-  SEND_RETRY_ERRORS_TO_DISCORD,
 } from '../constants.js';
 import { logServiceError } from '../utils/errorHandler.js';
 import {
@@ -153,20 +152,6 @@ async function createChatSession(message) {
 // Processing status embeds
 // ---------------------------------------------------------------------------
 
-function createProcessingEmbed(textStatus = '[🔁]', mediaStatus = '[🔁]', finalText = '') {
-  return createStatusEmbed({
-    variant: 'info',
-    title: 'Processing',
-    description: [
-      'Working on your request.',
-      '',
-      `- ${textStatus} Text attachment check`,
-      `- ${mediaStatus} Media attachment check`,
-      finalText,
-    ].filter(Boolean).join('\n'),
-  });
-}
-
 function createEmptyMessageEmbed() {
   return createStatusEmbed({
     variant: 'warning',
@@ -216,7 +201,7 @@ function getMentionPattern(clientUserId) {
 // Error reply helper
 // ---------------------------------------------------------------------------
 
-async function sendErrorReply(message, processingMessage, deleteHistoryRef) {
+async function sendErrorReply(message, deleteHistoryRef) {
   const errorEmbed = createStatusEmbed({
     variant: 'error',
     title: 'Request Failed',
@@ -224,20 +209,11 @@ async function sendErrorReply(message, processingMessage, deleteHistoryRef) {
   });
 
   const ctx = messageToActionContext(message);
-
-  if (processingMessage) {
-    await processingMessage.edit(applyEmbedFallback(message.channel, { embeds: [errorEmbed] }));
-    await attachActionButtons(processingMessage, ctx, {
-      deleteTargetIds: processingMessage.id,
-      deleteHistoryRef,
-    });
-  } else {
-    const errorMessage = await message.reply(applyEmbedFallback(message.channel, { embeds: [errorEmbed] }));
-    await attachActionButtons(errorMessage, ctx, {
-      deleteTargetIds: errorMessage.id,
-      deleteHistoryRef,
-    });
-  }
+  const errorMessage = await message.reply(applyEmbedFallback(message.channel, { embeds: [errorEmbed] }));
+  await attachActionButtons(errorMessage, ctx, {
+    deleteTargetIds: errorMessage.id,
+    deleteHistoryRef,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -267,33 +243,14 @@ export async function handleTextMessage(message) {
   }
 
   const stopTyping = createTypingHeartbeat(message.channel);
-  let processingMessage = null;
   let parts;
   let unsupportedWarningMessageId = null;
 
   try {
-    if (SEND_RETRY_ERRORS_TO_DISCORD) {
-      processingMessage = await message.reply(applyEmbedFallback(message.channel, {
-        embeds: [createProcessingEmbed()],
-      }));
-
-      messageContent = await extractFileText(message, messageContent);
-      await processingMessage.edit(applyEmbedFallback(message.channel, {
-        embeds: [createProcessingEmbed('[☑️]', '[🔁]')],
-      }));
-
-      parts = await processPromptAndMediaAttachments(messageContent, message);
-      const warningMessage = await sendUnsupportedAttachmentsWarning(unsupportedAttachments, message, deleteHistoryRef);
-      unsupportedWarningMessageId = warningMessage?.id || null;
-      await processingMessage.edit(applyEmbedFallback(message.channel, {
-        embeds: [createProcessingEmbed('[☑️]', '[☑️]', '**All checks complete.** Waiting for generation...')],
-      }));
-    } else {
-      messageContent = await extractFileText(message, messageContent);
-      parts = await processPromptAndMediaAttachments(messageContent, message);
-      const warningMessage = await sendUnsupportedAttachmentsWarning(unsupportedAttachments, message, deleteHistoryRef);
-      unsupportedWarningMessageId = warningMessage?.id || null;
-    }
+    messageContent = await extractFileText(message, messageContent);
+    parts = await processPromptAndMediaAttachments(messageContent, message);
+    const warningMessage = await sendUnsupportedAttachmentsWarning(unsupportedAttachments, message, deleteHistoryRef);
+    unsupportedWarningMessageId = warningMessage?.id || null;
   } catch (error) {
     stopTyping();
     logServiceError('ConversationService', error, {
@@ -301,13 +258,10 @@ export async function handleTextMessage(message) {
       messageId: message.id,
       userId: message.author?.id,
     });
-
-    if (processingMessage) {
-      try {
-        await sendErrorReply(message, processingMessage, deleteHistoryRef);
-      } catch (replyError) {
-        logServiceError('ConversationService', replyError, { operation: 'initializeMessageErrorReply' });
-      }
+    try {
+      await sendErrorReply(message, deleteHistoryRef);
+    } catch (replyError) {
+      logServiceError('ConversationService', replyError, { operation: 'initializeMessageErrorReply' });
     }
     return;
   }
@@ -320,7 +274,7 @@ export async function handleTextMessage(message) {
     }
 
     await streamModelResponse({
-      initialBotMessage: processingMessage,
+      initialBotMessage: null,
       chat: await createChatSession(message),
       parts,
       originalMessage: message,
@@ -333,7 +287,7 @@ export async function handleTextMessage(message) {
       userId: message.author?.id,
     });
     try {
-      await sendErrorReply(message, processingMessage, deleteHistoryRef);
+      await sendErrorReply(message, deleteHistoryRef);
     } catch (replyError) {
       logServiceError('StreamingService', replyError, { operation: 'errorReply' });
     }
