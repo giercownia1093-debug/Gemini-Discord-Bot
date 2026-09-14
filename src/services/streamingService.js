@@ -66,7 +66,6 @@ function logStreamError(operation, error, metadata = {}) {
   logServiceError('StreamingService', error, { operation, ...metadata });
 }
 
-
 // ---------------------------------------------------------------------------
 // Conversation persistence
 // ---------------------------------------------------------------------------
@@ -107,6 +106,7 @@ export async function streamModelResponse({
   const deleteHistoryRef = toDeleteHistoryRef(historyId, originalMessage.author.id);
   const responsePreference = getResponsePreference(originalMessage);
   const maxCharacterLimit = responsePreference === 'Embedded' ? EMBED_RESPONSE_LIMIT : PLAIN_RESPONSE_LIMIT;
+  
   let botMessage = await ensureInitialBotMessage(initialBotMessage, originalMessage);
   let finalized = false;
   let bufferedText = '';
@@ -139,11 +139,7 @@ export async function streamModelResponse({
 
     if (!bufferedText.trim()) {
       botMessage.edit(applyEmbedFallback(originalMessage.channel, {
-        embeds: [createStatusEmbed({
-          variant: 'muted',
-          title: 'Generating Response',
-          description: 'Still working on this response...',
-        })],
+        content: '.',
       })).catch((error) => {
         logStreamError('flushBufferedTextPlaceholder', error, { messageId: botMessage.id });
       });
@@ -264,7 +260,6 @@ export async function streamModelResponse({
 
         // --- Post-stream processing ---
 
-        // Determine file extensions from generated files and assign sandbox names
         const activeExtensions = accumulator.inlineDataFiles
           .map((f) => getFileExtension(f.mimeType).replace(/^\./, '').split('+')[0])
           .filter((ext) => ext && /^[a-z0-9]+$/i.test(ext));
@@ -286,69 +281,12 @@ export async function streamModelResponse({
         }
 
         activeAbortController = null;
-
         attempts -= 1;
-        console.error(formatGeminiErrorForConsole(error, {
-          attemptNumber: MAX_GENERATION_ATTEMPTS - attempts,
-          totalAttempts: MAX_GENERATION_ATTEMPTS,
-          remainingAttempts: attempts,
-          userId: originalMessage.author.id,
-          channelId: originalMessage.channel?.id,
-          historyId,
-        }), error);
 
         if (attempts <= 0 || wasStopped()) {
-          if (!wasStopped()) {
-            const embed = SEND_RETRY_ERRORS_TO_DISCORD
-              ? buildRetryErrorEmbed(error, { isFinal: true })
-              : createStatusEmbed({
-                  variant: 'error',
-                  title: 'Bot Overloaded',
-                  description: 'The bot is currently overloaded or unavailable. Please try again shortly.',
-                });
-
-            const errorMessage = await originalMessage.channel.send(applyEmbedFallback(originalMessage.channel, {
-              content: `<@${originalMessage.author.id}>`,
-              embeds: [embed],
-            }));
-
-            const linkedMessageIds = [
-              botMessage.id,
-              ...extraMessageIds,
-            ].filter(Boolean);
-
-            if (shouldShowActionButtons(originalMessage.guild?.id, originalMessage.author.id, originalMessage.channelId)) {
-              let updatedErrorMessage = await addSettingsButton(errorMessage);
-              updatedErrorMessage = await addDeleteButton(
-                updatedErrorMessage,
-                [updatedErrorMessage.id, ...linkedMessageIds].join(','),
-                deleteHistoryRef,
-              );
-
-              botMessage = await clearMessageActionRows(botMessage);
-              botMessage = await addSettingsButton(botMessage);
-              botMessage = await addDeleteButton(botMessage, [botMessage.id, updatedErrorMessage.id, ...extraMessageIds].join(','), deleteHistoryRef);
-            } else {
-              botMessage = await clearMessageActionRows(botMessage);
-            }
-            finalized = true;
-          }
-
+          finalized = true;
           collector.stop();
           return;
-        }
-
-        if (SEND_RETRY_ERRORS_TO_DISCORD) {
-          const retryMessage = await originalMessage.channel.send(applyEmbedFallback(originalMessage.channel, {
-            content: `<@${originalMessage.author.id}>`,
-            embeds: [buildRetryErrorEmbed(error, { isFinal: false })],
-          }));
-
-          setTimeout(() => {
-            retryMessage.delete().catch((deleteError) => {
-              logStreamError('deleteRetryMessage', deleteError, { messageId: retryMessage.id });
-            });
-          }, 5_000);
         }
 
         const attemptNumber = MAX_GENERATION_ATTEMPTS - attempts;
@@ -368,3 +306,4 @@ export async function streamModelResponse({
     }
   }
 }
+
