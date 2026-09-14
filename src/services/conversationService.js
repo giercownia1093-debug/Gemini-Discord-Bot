@@ -125,7 +125,7 @@ async function createChatSession(message) {
       },
       ...GENERATION_CONFIG,
       safetySettings: SAFETY_SETTINGS,
-      tools: [{ googleSearch: {} }],
+      tools: buildGeminiToolsFromPreferences(userToolPreferences),
     };
 
     const historyId = resolveHistoryId(message);
