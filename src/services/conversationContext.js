@@ -99,12 +99,10 @@ export function buildFinalSystemInstruction(personality, userToolPreferences) {
     ].join('\n'));
   }
 
-  if (userToolPreferences.googleSearch) {
-    sections.push([
-      '**Web Search & Research**',
-      'When using the Google Search tool, ensure your research is thorough. For complex or specific topics, run multiple varied searches and cross-reference results before answering.',
-    ].join('\n'));
-  }
+  sections.push([
+    '**Web Search & Research**',
+    'When using the Google Search tool, ensure your research is thorough. For complex or specific topics, run multiple varied searches and cross-reference results before answering. When the user asks for real-time information, current prices, or live data, you MUST use the Google Search tool.',
+  ].join('\n'));
 
   return sections.join('\n\n').trim();
 }
