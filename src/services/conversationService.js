@@ -108,10 +108,16 @@ async function sendUnsupportedAttachmentsWarning(unsupportedAttachments, message
 async function createChatSession(message) {
   try {
     const userToolPreferences = getUserGeminiToolPreferences(message.author.id);
-    const selectedTools = buildGeminiToolsFromPreferences(userToolPreferences);
     const personality = resolveInstructions(message);
     const fullSystemInstruction = buildFinalSystemInstruction(personality, userToolPreferences);
     const instructions = await buildConversationContext(message, fullSystemInstruction);
+
+    let activeModel = MODEL;
+    const nanoBananaMode = getUserNanoBananaMode(message.author.id);
+
+    if (ENABLE_NANO_BANANA_MODE && nanoBananaMode.enabled) {
+      activeModel = config.nanoBananaModel;
+    }
 
     const chatConfig = {
       systemInstruction: {
@@ -120,25 +126,8 @@ async function createChatSession(message) {
       },
       ...GENERATION_CONFIG,
       safetySettings: SAFETY_SETTINGS,
+      tools: [{ googleSearch: {} }],
     };
-
-    let activeModel = MODEL;
-    const nanoBananaMode = getUserNanoBananaMode(message.author.id);
-    const isSharedHistory = isSharedConversation(message);
-    const isSharedPers = isSharedPersonality(message);
-
-    if (ENABLE_NANO_BANANA_MODE && nanoBananaMode.enabled && !isSharedHistory && !isSharedPers) {
-      activeModel = config.nanoBananaModel;
-
-      if (nanoBananaMode.googleSearch && nanoBananaMode.imageSearch) {
-        chatConfig.tools = [{ googleSearch: { searchTypes: { imageSearch: {} } } }];
-      } else if (nanoBananaMode.googleSearch) {
-        chatConfig.tools = [{ googleSearch: {} }];
-      }
-      // else: no tools - chatConfig.tools stays unset
-    } else if (selectedTools.length > 0) {
-      chatConfig.tools = selectedTools;
-    }
 
     const historyId = resolveHistoryId(message);
     const category = resolveHistoryCategory(message);
@@ -272,7 +261,6 @@ export async function handleTextMessage(message) {
   const hasYouTubeContent = extractYouTubeUrls(messageContent).length > 0;
 
   if (!messageContent && !hasYouTubeContent && !(message.attachments.size > 0 && hasSupportedAttachments(message))) {
-
     const response = await message.reply(applyEmbedFallback(message.channel, { embeds: [createEmptyMessageEmbed()] }));
     await attachActionButtons(response, messageToActionContext(message));
     return;
