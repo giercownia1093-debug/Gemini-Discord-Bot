@@ -34,7 +34,7 @@ export async function ensureInitialBotMessage(initialBotMessage, originalMessage
     }
 
     return await originalMessage.reply(applyEmbedFallback(originalMessage.channel, {
-      content: 'Generuję odpowiedź...',
+      content: '.',
       components: [createStopButtonRow()],
     }));
   } catch (error) {
