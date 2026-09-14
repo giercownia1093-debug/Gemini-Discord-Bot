@@ -19,7 +19,7 @@ const config = Object.freeze({
   workInDMs: true,
   shouldDisplayPersonalityButtons: true,
   enableGeminiApiLogging: false,
-  SEND_RETRY_ERRORS_TO_DISCORD: FALSE,
+  SEND_RETRY_ERRORS_TO_DISCORD: false,
   defaultPersonality:
     "You are Gemini, a large language model trained by Google.",
   activities: [
@@ -50,8 +50,8 @@ const config = Object.freeze({
     responseStyle: 'decide',
   },
   defaultGeminiToolPreferences: {
-    googleSearch: false,
-    urlContext: false,
+    googleSearch: true,
+    urlContext: true,
     codeExecution: false,
   },
   chatHistoryLimits: {
@@ -65,11 +65,9 @@ const config = Object.freeze({
 export default config;
 `;
 
-if (!fs.existsSync(configPath)) {
-  console.log('config.js not found. Creating default configuration...');
-  fs.writeFileSync(configPath, defaultConfig);
-  console.log('Default config.js created.');
-}
+// Zawsze nadpisujemy lub tworzymy config, aby wymusić włączenie szukania w necie
+fs.writeFileSync(configPath, defaultConfig);
+console.log('Config.js updated with Google Search enabled.');
 
 // Dynamically import the main application entry point
 await import('./src/startup/main.js');
