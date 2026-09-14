@@ -9,7 +9,7 @@ const configPath = path.join(__dirname, 'config.js');
 
 const defaultConfig = `// For advanced configuration, edit \`constants.js\`.
 const config = Object.freeze({
-  defaultModel: 'gemini-flash-lite-latest',
+  defaultModel: 'gemini-2.5-flash',
   nanoBananaModel: 'gemini-2.5-flash-image',
   enableNanoBananaMode: false,
   maxGenerationAttempts: 3,
